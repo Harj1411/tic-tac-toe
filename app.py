@@ -12,7 +12,7 @@ EMPTY = ""
 
 
 # ============================================================
-# TIC-TAC-TOE GAME
+# TIC-TAC-TOE GAME ENGINE
 # ============================================================
 
 class TicTacToe:
@@ -35,19 +35,13 @@ class TicTacToe:
         self.board = [EMPTY] * 9
 
     def available_moves(self):
-        return [
-            i
-            for i, cell in enumerate(self.board)
-            if cell == EMPTY
-        ]
+        return [i for i, cell in enumerate(self.board) if cell == EMPTY]
 
     def make_move(self, position, player):
         if position < 0 or position > 8:
             return False
-
         if self.board[position] != EMPTY:
             return False
-
         self.board[position] = player
         return True
 
@@ -72,20 +66,14 @@ class TicTacToe:
         return []
 
     def is_draw(self):
-        return (
-            len(self.available_moves()) == 0
-            and self.winner() is None
-        )
+        return len(self.available_moves()) == 0 and self.winner() is None
 
     def game_over(self):
-        return (
-            self.winner() is not None
-            or self.is_draw()
-        )
+        return self.winner() is not None or self.is_draw()
 
 
 # ============================================================
-# EASY AI
+# AI IMPLEMENTATIONS
 # ============================================================
 
 class EasyAI:
@@ -101,10 +89,6 @@ class EasyAI:
         return random.choice(moves)
 
 
-# ============================================================
-# MEDIUM AI
-# ============================================================
-
 class MediumAI:
 
     def __init__(self, ai_symbol, human_symbol):
@@ -116,7 +100,7 @@ class MediumAI:
         if not moves:
             return None
 
-        # 1. AI can win
+        # 1. Win if possible
         for move in moves:
             game.board[move] = self.ai_symbol
             if game.winner() == self.ai_symbol:
@@ -132,16 +116,13 @@ class MediumAI:
                 return move
             game.board[move] = EMPTY
 
-        # 3. Center
+        # 3. Take center
         if 4 in moves:
             return 4
 
-        # 4. Corner
+        # 4. Take corner
         corners = [0, 2, 6, 8]
-        available_corners = [
-            move for move in corners
-            if move in moves
-        ]
+        available_corners = [m for m in corners if m in moves]
         if available_corners:
             return random.choice(available_corners)
 
@@ -149,11 +130,8 @@ class MediumAI:
         return random.choice(moves)
 
 
-# ============================================================
-# HARD AI - MINIMAX
-# ============================================================
-
 class HardAI:
+    """Optimized Minimax with Alpha-Beta pruning and instant opening fast-path."""
 
     def __init__(self, ai_symbol, human_symbol):
         self.ai_symbol = ai_symbol
@@ -164,12 +142,20 @@ class HardAI:
         if not moves:
             return None
 
+        # Instant fast-paths for early game (eliminates CPU delay)
+        if len(moves) == 9:
+            return 4  # Center is optimal opening
+        if len(moves) == 8:
+            if 4 in moves:
+                return 4
+            return random.choice([0, 2, 6, 8])
+
         best_score = float("-inf")
         best_move = moves[0]
 
         for move in moves:
             game.board[move] = self.ai_symbol
-            score = self.minimax(game, False, 0)
+            score = self.minimax(game, False, 0, float("-inf"), float("inf"))
             game.board[move] = EMPTY
 
             if score > best_score:
@@ -178,60 +164,41 @@ class HardAI:
 
         return best_move
 
-    def minimax(self, game, maximizing, depth):
+    def minimax(self, game, maximizing, depth, alpha, beta):
         winner = game.winner()
-
         if winner == self.ai_symbol:
             return 10 - depth
-
         if winner == self.human_symbol:
             return depth - 10
-
         if game.is_draw():
             return 0
 
         if maximizing:
-            best_score = float("-inf")
+            max_eval = float("-inf")
             for move in game.available_moves():
                 game.board[move] = self.ai_symbol
-                score = self.minimax(game, False, depth + 1)
+                score = self.minimax(game, False, depth + 1, alpha, beta)
                 game.board[move] = EMPTY
-                best_score = max(best_score, score)
-            return best_score
+                max_eval = max(max_eval, score)
+                alpha = max(alpha, score)
+                if beta <= alpha:
+                    break
+            return max_eval
         else:
-            best_score = float("inf")
+            min_eval = float("inf")
             for move in game.available_moves():
                 game.board[move] = self.human_symbol
-                score = self.minimax(game, True, depth + 1)
+                score = self.minimax(game, True, depth + 1, alpha, beta)
                 game.board[move] = EMPTY
-                best_score = min(best_score, score)
-            return best_score
+                min_eval = min(min_eval, score)
+                beta = min(beta, score)
+                if beta <= alpha:
+                    break
+            return min_eval
 
 
 # ============================================================
-# GAME STATE
-# ============================================================
-
-def create_state():
-    return {
-        "game": TicTacToe(),
-        "mode": "PvE",
-        "difficulty": "Hard",
-        "human": X,
-        "ai": O,
-        "current": X,
-        "ai_player": None,
-        "game_over": False,
-        "result": None,
-        "winning_cells": [],
-        "x_score": 0,
-        "o_score": 0,
-        "draws": 0
-    }
-
-
-# ============================================================
-# CREATE AI
+# GAME STATE & FACTORIES
 # ============================================================
 
 def create_ai(difficulty, ai_symbol, human_symbol):
@@ -243,24 +210,39 @@ def create_ai(difficulty, ai_symbol, human_symbol):
         return HardAI(ai_symbol, human_symbol)
 
 
+def create_state(mode="PvE", difficulty="Hard", human_symbol=X):
+    ai_symbol = O if human_symbol == X else X
+    return {
+        "game": TicTacToe(),
+        "mode": mode,
+        "difficulty": difficulty,
+        "human": human_symbol,
+        "ai": ai_symbol,
+        "current": X,
+        "ai_player": create_ai(difficulty, ai_symbol, human_symbol),
+        "game_over": False,
+        "result": None,
+        "winning_cells": [],
+        "x_score": 0,
+        "o_score": 0,
+        "draws": 0
+    }
+
+
 # ============================================================
-# SCORE DISPLAY
+# SCORE & BOARD DISPLAY
 # ============================================================
 
 def score_text(state):
     return (
         "### 🏆 Score\n\n"
-        f"❌ X: **{state['x_score']}**"
+        f"❌ X: **{state.get('x_score', 0)}**"
         "  "
-        f"🤝 Draws: **{state['draws']}**"
+        f"🤝 Draws: **{state.get('draws', 0)}**"
         "  "
-        f"⭕ O: **{state['o_score']}**"
+        f"⭕ O: **{state.get('o_score', 0)}**"
     )
 
-
-# ============================================================
-# BOARD DISPLAY
-# ============================================================
 
 def display(state, message):
     board = state["game"].board
@@ -273,7 +255,7 @@ def display(state, message):
             value = f"🏆 {value}"
         cells.append(value)
 
-    if state["game_over"]:
+    if state.get("game_over", False):
         new_board_visible = gr.update(visible=True)
         show_winner_visible = gr.update(visible=True)
     else:
@@ -291,7 +273,7 @@ def display(state, message):
 
 
 # ============================================================
-# START NEW ROUND
+# GAME LIFECYCLE
 # ============================================================
 
 def start_new_round(
@@ -301,6 +283,9 @@ def start_new_round(
     human_symbol,
     preserve_score=True
 ):
+    if not isinstance(state, dict):
+        state = create_state(mode, difficulty, human_symbol)
+
     if preserve_score:
         x_score = state.get("x_score", 0)
         o_score = state.get("o_score", 0)
@@ -310,25 +295,16 @@ def start_new_round(
         o_score = 0
         draws = 0
 
-    new_state = create_state()
-    new_state["mode"] = mode
-    new_state["difficulty"] = difficulty
-    new_state["human"] = human_symbol
+    new_state = create_state(mode, difficulty, human_symbol)
     new_state["x_score"] = x_score
     new_state["o_score"] = o_score
     new_state["draws"] = draws
-    new_state["game_over"] = False
-    new_state["result"] = None
-    new_state["winning_cells"] = []
 
     if mode == "PvP":
         new_state["ai"] = None
         new_state["ai_player"] = None
         new_state["current"] = X
-        message = (
-            "👥 **Player vs Player**\n\n"
-            "❌ Player X's turn."
-        )
+        message = "👥 **Player vs Player**\n\n❌ Player X's turn."
         return display(new_state, message)
 
     # PvE
@@ -346,6 +322,7 @@ def start_new_round(
         )
         return display(new_state, message)
 
+    # If human chose O, AI starts as X
     ai_move = new_state["ai_player"].get_move(new_state["game"])
     if ai_move is not None:
         new_state["game"].make_move(ai_move, ai_symbol)
@@ -355,49 +332,22 @@ def start_new_round(
         "🤖 **Player vs AI**\n\n"
         "You are ⭕ **O**\n\n"
         f"AI is ❌ **X** ({difficulty})\n\n"
-        "🤖 AI made the first move.\n\n"
+        f"🤖 AI placed **{ai_symbol}** at position **{ai_move + 1}**.\n\n"
         "👉 **Your turn!**"
     )
     return display(new_state, message)
 
 
-# ============================================================
-# NEW BOARD & NEW GAME BUTTONS
-# ============================================================
-
 def new_board(mode, difficulty, human_symbol, state):
-    return start_new_round(
-        state,
-        mode,
-        difficulty,
-        human_symbol,
-        preserve_score=True
-    )
+    return start_new_round(state, mode, difficulty, human_symbol, preserve_score=True)
 
 new_game = new_board
 
 
-# ============================================================
-# RESET SCORES
-# ============================================================
-
 def reset_scores(mode, difficulty, human_symbol, state):
-    fresh_state = create_state()
-    fresh_state["x_score"] = 0
-    fresh_state["o_score"] = 0
-    fresh_state["draws"] = 0
-    return start_new_round(
-        fresh_state,
-        mode,
-        difficulty,
-        human_symbol,
-        preserve_score=False
-    )
+    fresh_state = create_state(mode, difficulty, human_symbol)
+    return start_new_round(fresh_state, mode, difficulty, human_symbol, preserve_score=False)
 
-
-# ============================================================
-# SHOW WINNING BOARD
-# ============================================================
 
 def show_winning_board(state):
     if not isinstance(state, dict):
@@ -412,78 +362,78 @@ def show_winning_board(state):
             f"🏆 **Winning Board**\n\n"
             f"Player **{winner}** won this round.\n\n"
             "The winning cells are highlighted with 🏆.\n\n"
-            "Click **New Board** when you are ready."
+            "Click **New Board** to play again."
         )
     else:
         message = (
             "🤝 **Final Board**\n\n"
             "This round ended in a draw.\n\n"
-            "Click **New Board** when you are ready."
+            "Click **New Board** to play again."
         )
 
     return display(state, message)
 
 
 # ============================================================
-# PLAYER MOVE
+# PLAYER MOVE HANDLER
 # ============================================================
 
 def player_move(position, state):
     if not isinstance(state, dict):
         state = create_state()
 
-    game = state["game"]
-
-    if state["game_over"]:
-        return display(
-            state,
-            "🏁 This round is complete. "
-            "Choose **New Board** or "
-            "**Show Winning Board**."
+    # Safety: ensure AI is initialized even if state was empty
+    if state.get("mode") == "PvE" and state.get("ai_player") is None:
+        state["ai_player"] = create_ai(
+            state.get("difficulty", "Hard"),
+            state.get("ai", O),
+            state.get("human", X)
         )
 
-    if state["mode"] == "PvE":
-        if state["current"] != state["human"]:
-            return display(state, "🤖 Please wait for the AI.")
+    game = state["game"]
 
-    player = state["current"]
+    if state.get("game_over", False):
+        return display(
+            state,
+            "🏁 This round is complete. Click **New Board** to start a new match."
+        )
+
+    # PvE: ensure it's human's turn
+    if state.get("mode") == "PvE":
+        if state.get("current") != state.get("human"):
+            return display(state, "🤖 Please wait for the AI to move.")
+
+    player = state.get("current", X)
     success = game.make_move(position, player)
 
     if not success:
         return display(state, "❌ That cell is already occupied.")
 
+    # Check human win
     if game.winner() == player:
         state["game_over"] = True
         state["result"] = player
         state["winning_cells"] = game.winning_cells()
-
         if player == X:
             state["x_score"] += 1
         else:
             state["o_score"] += 1
+        return display(state, f"🏆 **Player {player} wins!**\n\nClick **New Board** to play again.")
 
-        message = (
-            f"🏆 **Player {player} wins!**\n\n"
-            "What would you like to do?"
-        )
-        return display(state, message)
-
+    # Check draw
     if game.is_draw():
         state["game_over"] = True
         state["result"] = "Draw"
         state["winning_cells"] = []
         state["draws"] += 1
-        message = (
-            "🤝 **It's a Draw!**\n\n"
-            "What would you like to do?"
-        )
-        return display(state, message)
+        return display(state, "🤝 **It's a Draw!**\n\nClick **New Board** to play again.")
 
-    if state["mode"] == "PvP":
+    # PvP switch turn
+    if state.get("mode") == "PvP":
         state["current"] = O if player == X else X
         return display(state, f"👉 Player **{state['current']}**'s turn.")
 
-    # PvE - AI turn
+    # PvE - AI Turn
     state["current"] = state["ai"]
     ai = state["ai_player"]
     ai_move = ai.get_move(game)
@@ -492,42 +442,35 @@ def player_move(position, state):
         state["game_over"] = True
         state["result"] = "Draw"
         state["draws"] += 1
-        return display(state, "🤝 **It's a Draw!**\n\nWhat would you like to do?")
+        return display(state, "🤝 **It's a Draw!**\n\nClick **New Board** to play again.")
 
     game.make_move(ai_move, state["ai"])
 
+    # Check AI win
     if game.winner() == state["ai"]:
         state["game_over"] = True
         state["result"] = state["ai"]
         state["winning_cells"] = game.winning_cells()
-
         if state["ai"] == X:
             state["x_score"] += 1
         else:
             state["o_score"] += 1
+        return display(state, f"🤖 **AI ({state['ai']}) wins!**\n\nClick **New Board** to play again.")
 
-        message = (
-            f"🤖 **AI ({state['ai']}) wins!**\n\n"
-            "What would you like to do?"
-        )
-        return display(state, message)
-
+    # Check AI draw
     if game.is_draw():
         state["game_over"] = True
         state["result"] = "Draw"
         state["winning_cells"] = []
         state["draws"] += 1
-        return display(
-            state,
-            "🤝 **It's a Draw!**\n\nWhat would you like to do?"
-        )
+        return display(state, "🤝 **It's a Draw!**\n\nClick **New Board** to play again.")
 
+    # Switch back to human
     state["current"] = state["human"]
     return display(
         state,
         (
-            f"🤖 AI placed **{state['ai']}** "
-            f"at position **{ai_move + 1}**.\n\n"
+            f"🤖 AI placed **{state['ai']}** at position **{ai_move + 1}**.\n\n"
             "👉 **Your turn!**"
         )
     )
@@ -540,15 +483,16 @@ def player_move(position, state):
 css = """
 .game-title {
     text-align: center;
-    font-size: 42px;
-    font-weight: bold;
-    margin-bottom: 5px;
+    font-size: 38px;
+    font-weight: 800;
+    margin-bottom: 2px;
 }
 
 .subtitle {
     text-align: center;
     color: #888;
-    margin-bottom: 20px;
+    font-size: 15px;
+    margin-bottom: 16px;
 }
 
 .board-btn {
@@ -559,12 +503,20 @@ css = """
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    border-radius: 12px !important;
+    transition: all 0.2s ease-in-out !important;
+}
+
+.board-btn:hover {
+    transform: scale(1.02);
 }
 """
 
 # ============================================================
-# GRADIO APP
+# GRADIO INTERFACE
 # ============================================================
+
+initial_state = create_state("PvE", "Hard", X)
 
 with gr.Blocks(
     title="Tic-Tac-Toe",
@@ -578,19 +530,19 @@ with gr.Blocks(
         </div>
 
         <div class="subtitle">
-        Player vs Player • Player vs AI
+        Player vs Player • Player vs AI (Instant AI Moves)
         </div>
         """
     )
 
-    game_state = gr.State(create_state())
+    game_state = gr.State(initial_state)
 
     with gr.Row():
         # SETTINGS
         with gr.Column(scale=1):
-            gr.Markdown("## ⚙️ Settings")
+            gr.Markdown("### ⚙️ Settings")
             mode = gr.Radio(
-                ["PvP", "PvE"],
+                ["PvE", "PvP"],
                 value="PvE",
                 label="Game Mode"
             )
@@ -605,7 +557,7 @@ with gr.Blocks(
                 label="Your Symbol"
             )
             new_game_button = gr.Button(
-                "🎮 Start Game",
+                "🎮 New Game",
                 variant="primary"
             )
             reset_score_button = gr.Button(
@@ -614,7 +566,7 @@ with gr.Blocks(
 
         # BOARD
         with gr.Column(scale=2):
-            gr.Markdown("## 🎯 Game Board")
+            gr.Markdown("### 🎯 Game Board")
             board_buttons = []
 
             for row in range(3):
@@ -628,7 +580,9 @@ with gr.Blocks(
                         board_buttons.append(button)
 
             status = gr.Markdown(
-                "Click **Start Game** to begin."
+                "🤖 **Player vs AI**\n\n"
+                "You are ❌ **X** | AI is ⭕ **O** (Hard)\n\n"
+                "👉 **Your turn! Click any cell to start.**"
             )
 
             score = gr.Markdown(
@@ -658,7 +612,26 @@ with gr.Blocks(
         show_winning_button
     ]
 
+    # Mode / Setting change or Start Game
     new_game_button.click(
+        fn=new_game,
+        inputs=[mode, difficulty, symbol, game_state],
+        outputs=outputs
+    )
+
+    mode.change(
+        fn=new_game,
+        inputs=[mode, difficulty, symbol, game_state],
+        outputs=outputs
+    )
+
+    difficulty.change(
+        fn=new_game,
+        inputs=[mode, difficulty, symbol, game_state],
+        outputs=outputs
+    )
+
+    symbol.change(
         fn=new_game,
         inputs=[mode, difficulty, symbol, game_state],
         outputs=outputs
@@ -691,7 +664,7 @@ with gr.Blocks(
 
 
 # ============================================================
-# LAUNCH FOR PRODUCTION / RENDER
+# LAUNCH CONFIGURATION
 # ============================================================
 
 if __name__ == "__main__":
